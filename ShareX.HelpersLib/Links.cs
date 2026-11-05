@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -27,20 +27,21 @@ namespace ShareX.HelpersLib
 {
     public static class Links
     {
-        public const string Website = "https://getsharex.com";
-        public const string Callback = Website + "/callback/";
-        public const string Changelog = Website + "/changelog";
-        public const string Donate = Website + "/donate";
-        public const string PrivacyPolicy = Website + "/privacy-policy";
-        public const string ImageEffects = Website + "/image-effects";
-        public const string Actions = Website + "/actions";
-        private const string Docs = Website + "/docs";
+        public const string Website = "https://github.com/RavenStryker/RavenX";
+        private const string UpstreamWebsite = "https://getsharex.com";
+        public const string Callback = "https://ravenstryker.github.io/RavenX/callback/";
+        public const string Changelog = "https://github.com/RavenStryker/RavenX/releases";
+        public const string Donate = UpstreamWebsite + "/donate";
+        public const string PrivacyPolicy = UpstreamWebsite + "/privacy-policy";
+        public const string ImageEffects = UpstreamWebsite + "/image-effects";
+        public const string Actions = UpstreamWebsite + "/actions";
+        private const string Docs = UpstreamWebsite + "/docs";
         public const string DocsCustomUploader = Docs + "/custom-uploader";
         public const string DocsKeybinds = Docs + "/keybinds";
         public const string DocsOCR = Docs + "/ocr";
         public const string DocsScrollingScreenshot = Docs + "/scrolling-screenshot";
 
-        public const string GitHub = "https://github.com/ShareX/ShareX";
+        public const string GitHub = "https://github.com/RavenStryker/RavenX";
         public const string GitHubIssues = GitHub + "/issues?q=is%3Aissue";
         public const string Jaex = "https://github.com/Jaex";
         public const string McoreD = "https://github.com/McoreD";

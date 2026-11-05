@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -2257,7 +2257,7 @@ namespace ShareX
 
         public static async Task DownloadDevBuild()
         {
-            GitHubUpdateChecker updateChecker = new GitHubUpdateChecker("ShareX", "DevBuilds")
+            GitHubUpdateChecker updateChecker = new GitHubUpdateChecker("RavenStryker", "RavenX")
             {
                 IsDev = true,
                 IsPortable = Program.Portable

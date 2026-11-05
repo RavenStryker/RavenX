@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -35,7 +35,7 @@ namespace ShareX
         {
             if (UpdateChannel == UpdateChannel.Dev)
             {
-                return new GitHubUpdateChecker("ShareX", "DevBuilds")
+                return new GitHubUpdateChecker("RavenStryker", "RavenX")
                 {
                     IsDev = true,
                     IsPortable = Program.Portable,
@@ -44,7 +44,7 @@ namespace ShareX
             }
             else
             {
-                return new GitHubUpdateChecker("ShareX", "ShareX")
+                return new GitHubUpdateChecker("RavenStryker", "RavenX")
                 {
                     IsPortable = Program.Portable,
                     IncludePreRelease = UpdateChannel == UpdateChannel.PreRelease,

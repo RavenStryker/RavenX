@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -67,7 +67,7 @@ namespace ShareX.Setup
         private static string SolutionPath => Path.Combine(ParentDir, "ShareX.sln");
         private static string BinDir => Path.Combine(ParentDir, "ShareX", "bin", Configuration, "win-x64");
         private static string SteamLauncherDir => Path.Combine(ParentDir, "ShareX.Steam", "bin", Configuration);
-        private static string ExecutablePath => Path.Combine(BinDir, "ShareX.exe");
+        private static string ExecutablePath => Path.Combine(BinDir, "RavenX.exe");
 
         private static string OutputDir => Path.Combine(ParentDir, "Output");
         private static string PortableOutputDir => Path.Combine(OutputDir, "ShareX-portable");

@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -46,7 +46,7 @@ namespace ShareX.NativeMessagingHost
                     {
                         host.Write(input);
 
-                        string filePath = FileHelpers.GetAbsolutePath("ShareX.exe");
+                        string filePath = FileHelpers.GetAbsolutePath("RavenX.exe");
                         string tempFilePath = FileHelpers.GetTempFilePath("json");
                         File.WriteAllText(tempFilePath, input, Encoding.UTF8);
                         string argument = $"-NativeMessagingInput \"{tempFilePath}\"";

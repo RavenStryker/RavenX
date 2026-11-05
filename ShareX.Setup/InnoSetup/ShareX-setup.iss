@@ -1,13 +1,14 @@
-#define MyAppName "ShareX"
+#define MyAppName "RavenX"
+#define MyProjectName "ShareX"
 #define MyAppRootDirectory "..\.."
 #define MyAppOutputDirectory MyAppRootDirectory + "\Output"
-#define MyAppReleaseDirectory MyAppRootDirectory + "\" + MyAppName + "\bin\Release\win-x64"
+#define MyAppReleaseDirectory MyAppRootDirectory + "\" + MyProjectName + "\bin\Release\win-x64"
 #define MyAppFileName MyAppName + ".exe"
 #define MyAppFilePath MyAppReleaseDirectory + "\" + MyAppFileName
 #define MyAppVersion GetStringFileInfo(MyAppFilePath, "ProductVersion")
-#define MyAppPublisher "ShareX Team"
-#define MyAppURL "https://getsharex.com"
-#define MyAppId "82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC"
+#define MyAppPublisher "RavenStryker"
+#define MyAppURL "https://github.com/RavenStryker/RavenX"
+#define MyAppId "D752E42E-A4CB-4657-8943-639AB27060AB"
 
 [Setup]
 AppCopyright=Copyright (c) 2007-2026 ShareX Team

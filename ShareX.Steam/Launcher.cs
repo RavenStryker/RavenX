@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -35,12 +35,12 @@ namespace ShareX.Steam
     public static class Launcher
     {
         private static string ContentFolderPath = Helpers.GetAbsolutePath("ShareX");
-        private static string ContentExecutablePath = Path.Combine(ContentFolderPath, "ShareX.exe");
+        private static string ContentExecutablePath = Path.Combine(ContentFolderPath, "RavenX.exe");
         private static string ContentSteamFilePath = Path.Combine(ContentFolderPath, "Steam");
         private static string UpdatingTempFilePath = Path.Combine(ContentFolderPath, "Updating");
 
         private static string UpdateFolderPath = Helpers.GetAbsolutePath("Updates");
-        private static string UpdateExecutablePath = Path.Combine(UpdateFolderPath, "ShareX.exe");
+        private static string UpdateExecutablePath = Path.Combine(UpdateFolderPath, "RavenX.exe");
 
         private static bool IsFirstTimeRunning, IsStartupRun, ShowInApp, IsSteamInit;
         private static Stopwatch SteamInitStopwatch;
@@ -135,7 +135,7 @@ namespace ShareX.Steam
         private static bool IsShareXRunning()
         {
             // Check ShareX mutex.
-            return Helpers.IsRunning("82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC");
+            return Helpers.IsRunning("D752E42E-A4CB-4657-8943-639AB27060AB");
         }
 
         private static bool IsUpdateRequired()

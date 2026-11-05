@@ -1,4 +1,4 @@
-﻿#region License Information (GPL v3)
+#region License Information (GPL v3)
 
 /*
     ShareX - A program that allows you to take screenshots and share any file type
@@ -46,8 +46,8 @@ namespace ShareX
 {
     internal static class Program
     {
-        public const string AppName = "ShareX";
-        public const string MutexName = "82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC";
+        public const string AppName = "RavenX";
+        public const string MutexName = "D752E42E-A4CB-4657-8943-639AB27060AB";
         public static readonly string PipeName = $"{Environment.MachineName}-{Environment.UserName}-{AppName}";
 
         public const ShareXBuild Build =
