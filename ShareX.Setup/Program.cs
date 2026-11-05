@@ -70,23 +70,23 @@ namespace ShareX.Setup
         private static string ExecutablePath => Path.Combine(BinDir, "RavenX.exe");
 
         private static string OutputDir => Path.Combine(ParentDir, "Output");
-        private static string PortableOutputDir => Path.Combine(OutputDir, "ShareX-portable");
-        private static string DebugOutputDir => Path.Combine(OutputDir, "ShareX-debug");
-        private static string SteamOutputDir => Path.Combine(OutputDir, "ShareX-Steam");
-        private static string MicrosoftStoreOutputDir => Path.Combine(OutputDir, "ShareX-MicrosoftStore");
-        private static string MicrosoftStoreDebugOutputDir => Path.Combine(OutputDir, "ShareX-MicrosoftStore-debug");
+        private static string PortableOutputDir => Path.Combine(OutputDir, "RavenX-portable");
+        private static string DebugOutputDir => Path.Combine(OutputDir, "RavenX-debug");
+        private static string SteamOutputDir => Path.Combine(OutputDir, "RavenX-Steam");
+        private static string MicrosoftStoreOutputDir => Path.Combine(OutputDir, "RavenX-MicrosoftStore");
+        private static string MicrosoftStoreDebugOutputDir => Path.Combine(OutputDir, "RavenX-MicrosoftStore-debug");
 
         private static string SetupDir => Path.Combine(ParentDir, "ShareX.Setup");
         private static string InnoSetupDir => Path.Combine(SetupDir, "InnoSetup");
         private static string MicrosoftStorePackageFilesDir => Path.Combine(SetupDir, "MicrosoftStore");
 
-        private static string SetupPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}-setup.exe");
-        private static string PortableZipPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}-portable.zip");
-        private static string DebugZipPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}-debug.zip");
+        private static string SetupPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}-setup.exe");
+        private static string PortableZipPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}-portable.zip");
+        private static string DebugZipPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}-debug.zip");
         private static string SteamUpdatesDir => Path.Combine(SteamOutputDir, "Updates");
-        private static string SteamZipPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}-Steam.zip");
-        private static string MicrosoftStoreAppxPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}.appx");
-        private static string MicrosoftStoreDebugAppxPath => Path.Combine(OutputDir, $"ShareX-{AppVersion}-debug.appx");
+        private static string SteamZipPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}-Steam.zip");
+        private static string MicrosoftStoreAppxPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}.appx");
+        private static string MicrosoftStoreDebugAppxPath => Path.Combine(OutputDir, $"RavenX-{AppVersion}-debug.appx");
         private static string FFmpegPath => Path.Combine(OutputDir, "ffmpeg.exe");
         private static string RecorderDevicesSetupPath => Path.Combine(OutputDir, $"recorder-devices-{RecorderDevicesVersion}-setup.exe");
         private static string ExifToolPath => Path.Combine(OutputDir, "exiftool.exe");
