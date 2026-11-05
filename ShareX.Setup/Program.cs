@@ -454,10 +454,25 @@ namespace ShareX.Setup
             {
                 string fileName = Path.GetFileName(ExifToolDownloadURL);
                 string filePath = Path.Combine(OutputDir, fileName);
-
+        
                 Console.WriteLine("Downloading: " + ExifToolDownloadURL);
-                WebHelpers.DownloadFileAsync(ExifToolDownloadURL, filePath).GetAwaiter().GetResult();
-
+        
+                try
+                {
+                    WebHelpers.DownloadFileAsync(ExifToolDownloadURL, filePath).GetAwaiter().GetResult();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("ExifTool download failed, skipping: " + e.Message);
+                    return;
+                }
+        
+                if (!File.Exists(filePath))
+                {
+                    Console.WriteLine("ExifTool download produced no file, skipping.");
+                    return;
+                }
+        
                 Console.WriteLine("Extracting: " + filePath);
                 ZipManager.Extract(filePath, OutputDir);
             }
