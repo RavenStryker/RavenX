@@ -83,6 +83,7 @@ jobs:
         with:
           name: Setup
           path: Output\ShareX-${{ env.APP_VERSION }}-setup.exe
+          if-no-files-found: error
 
       - name: Upload artifact (Portable)
         if: matrix.configuration == 'Release'

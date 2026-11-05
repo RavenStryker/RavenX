@@ -10,294 +10,301 @@
     Those are invisible to users and renaming them across a 19-year codebase buys
     nothing but merge pain when you pull upstream security fixes.
 
-    Every replacement is checked. If an expected string isn't found, the script
-    stops rather than silently skipping it — a no-op rebrand that looks like it
-    worked is the worst outcome here.
+    Every replacement is checked. If an expected string is not found, the script
+    stops rather than silently skipping it. Already-applied edits are detected
+    and reported, so the script is safe to re-run.
 
 .PARAMETER RepoRoot
     Path to the repo. Defaults to the current directory.
 
-.PARAMETER AppName
-    User-visible application name. Default: RavenX
-
-.PARAMETER Publisher
-    Publisher string shown in Add/Remove Programs.
-
-.PARAMETER GitHubOwner
-    GitHub account that hosts your releases. Update checks hit this.
-
-.PARAMETER GitHubRepo
-    Repository name that hosts your releases.
-
-.PARAMETER Website
-    Your project homepage. Used for the About dialog.
-
-.PARAMETER CallbackUrl
-    OAuth redirect URI. Must match what you register with each OAuth provider.
-    A GitHub Pages path works fine.
-
-.PARAMETER RenameAssembly
-    Also rename the output binary to <AppName>.exe. Default: on.
-    Pass -RenameAssembly:$false to keep ShareX.exe.
-
-.PARAMETER WhatIf
-    Show what would change without writing anything.
+.PARAMETER Guid
+    Pin the install GUID instead of generating a fresh one. Pass the GUID from
+    your first run whenever you re-run this, or your installer gets a new
+    identity and stops recognizing its own previous installs.
 
 .EXAMPLE
     .\Rebrand-RavenX.ps1 -WhatIf
 
 .EXAMPLE
-    .\Rebrand-RavenX.ps1 -GitHubOwner RavenStryker -GitHubRepo RavenX
+    .\Rebrand-RavenX.ps1 -Guid D752E42E-A4CB-4657-8943-639AB27060AB
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$RepoRoot     = ".",
-    [string]$AppName      = "RavenX",
-    [string]$Publisher    = "RavenStryker",
-    [string]$GitHubOwner  = "RavenStryker",
-    [string]$GitHubRepo   = "RavenX",
-    [string]$Website      = "https://github.com/RavenStryker/RavenX",
-    [string]$CallbackUrl  = "https://ravenstryker.github.io/RavenX/callback/",
-    [bool]$RenameAssembly = $true
+    [string] $RepoRoot = '.',
+    [string] $AppName = 'RavenX',
+    [string] $Publisher = 'RavenStryker',
+    [string] $GitHubOwner = 'RavenStryker',
+    [string] $GitHubRepo = 'RavenX',
+    [string] $Website = 'https://github.com/RavenStryker/RavenX',
+    [string] $CallbackUrl = 'https://ravenstryker.github.io/RavenX/callback/',
+    [bool]   $RenameAssembly = $true,
+    [string] $Guid = ''
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+
+# Everything below uses single-quoted strings and concatenation on purpose.
+# No backtick escapes, no backtick line continuations: one stray backtick in
+# either turns the rest of the file into an unterminated string.
+$Q = [string][char]34
 
 # ShareX's install GUID. Shared by the mutex, the Inno Setup AppId, and the
 # Steam launcher's running-instance check. Leaving it in place means your
 # installer claims upstream ShareX's uninstall entry and the two can never
 # run at the same time.
-$UpstreamGuid = "82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC"
-$NewGuid      = [guid]::NewGuid().ToString().ToUpper()
+$UpstreamGuid = '82E6AC09-0FEF-4390-AD9F-0DD3F5561EFC'
+
+if ($Guid -ne '') {
+    $parsed = [System.Guid]::Empty
+    if (-not [System.Guid]::TryParse($Guid, [ref] $parsed)) {
+        throw ('Not a valid GUID: ' + $Guid)
+    }
+    $NewGuid = $parsed.ToString().ToUpper()
+    if ($NewGuid -eq $UpstreamGuid) {
+        throw 'That is upstream ShareX GUID. Using it would claim their uninstall entry.'
+    }
+    $GuidSource = 'pinned'
+}
+else {
+    $NewGuid = [System.Guid]::NewGuid().ToString().ToUpper()
+    $GuidSource = 'generated'
+}
 
 $RepoRoot = (Resolve-Path $RepoRoot).Path
-$script:Changes = 0
-$script:Files   = @{}
+$Repo = 'https://github.com/' + $GitHubOwner + '/' + $GitHubRepo
 
-function Edit-File {
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Find,
-        [Parameter(Mandatory)][string]$Replace,
-        [string]$Label,
-        [switch]$All,
-        [switch]$Optional
-    )
+Write-Host ''
+Write-Host ('Rebranding ShareX 19.0.2 -> ' + $AppName) -ForegroundColor Cyan
+Write-Host ('  repo      ' + $RepoRoot)
+Write-Host ('  updates   ' + $Repo)
+Write-Host ('  GUID      ' + $NewGuid + ' (' + $GuidSource + ')')
+Write-Host ''
 
-    $full = Join-Path $RepoRoot $Path
-    if (-not (Test-Path $full)) {
-        if ($Optional) { Write-Host "  skip  $Path (not present)" -ForegroundColor DarkGray; return }
-        throw "Missing file: $Path`nAre you sure this is a ShareX v19.0.2 checkout?"
+$iss = 'ShareX.Setup\InnoSetup\ShareX-setup.iss'
+$links = 'ShareX.HelpersLib\Links.cs'
+$prog = 'ShareX\Program.cs'
+
+$edits = @()
+
+function New-Edit {
+    param($Path, $Find, $Replace, $Label, $Group, [switch] $All, [switch] $Optional)
+    return [pscustomobject] @{
+        Path = $Path; Find = $Find; Replace = $Replace; Label = $Label
+        Group = $Group; All = [bool] $All; Optional = [bool] $Optional
     }
-
-    $content = [System.IO.File]::ReadAllText($full)
-
-    if ($content -notmatch [regex]::Escape($Find)) {
-        if ($Optional) { Write-Host "  skip  $Path :: $Label (already applied?)" -ForegroundColor DarkGray; return }
-        throw "Expected string not found in $Path`n  Looking for: $Find`nThe source may have drifted from v19.0.2. Fix this before continuing."
-    }
-
-    $count = ([regex]::Matches($content, [regex]::Escape($Find))).Count
-    if (-not $All -and $count -gt 1) {
-        throw "Found $count matches for a single-match replacement in $Path. Refusing to guess."
-    }
-
-    $updated = if ($All) {
-        $content -replace [regex]::Escape($Find), $Replace.Replace('$', '$$')
-    } else {
-        [regex]::new([regex]::Escape($Find)).Replace($content, $Replace.Replace('$', '$$'), 1)
-    }
-
-    if ($PSCmdlet.ShouldProcess($Path, $Label)) {
-        [System.IO.File]::WriteAllText($full, $updated, [System.Text.UTF8Encoding]::new($false))
-    }
-
-    $script:Changes += $count
-    $script:Files[$Path] = $true
-    Write-Host ("  ok    {0,-46} {1}" -f $Path, $Label) -ForegroundColor Green
 }
-
-Write-Host ""
-Write-Host "Rebranding ShareX 19.0.2 -> $AppName" -ForegroundColor Cyan
-Write-Host "  repo       $RepoRoot"
-Write-Host "  updates    github.com/$GitHubOwner/$GitHubRepo"
-Write-Host "  new GUID   $NewGuid"
-Write-Host ""
 
 # --- Identity -------------------------------------------------------------
-Write-Host "Application identity" -ForegroundColor Yellow
 
-Edit-File -Path "ShareX\Program.cs" `
-    -Find    'public const string AppName = "ShareX";' `
-    -Replace "public const string AppName = `"$AppName`";" `
-    -Label   "AppName"
+$edits += New-Edit -Group 'Identity' -Path $prog -Label 'AppName' `
+    -Find ('public const string AppName = ' + $Q + 'ShareX' + $Q + ';') `
+    -Replace ('public const string AppName = ' + $Q + $AppName + $Q + ';')
 
-# Drives the personal folder (Documents\<AppName>), the pipe name, and the
-# single-instance mutex. Changing it is what isolates your config from an
-# existing ShareX install.
-Edit-File -Path "ShareX\Program.cs" `
-    -Find    "public const string MutexName = `"$UpstreamGuid`";" `
-    -Replace "public const string MutexName = `"$NewGuid`";" `
-    -Label   "single-instance mutex"
+$edits += New-Edit -Group 'Identity' -Path $prog -Label 'single-instance mutex' `
+    -Find ('public const string MutexName = ' + $Q + $UpstreamGuid + $Q + ';') `
+    -Replace ('public const string MutexName = ' + $Q + $NewGuid + $Q + ';')
 
-Edit-File -Path "ShareX.Steam\Launcher.cs" `
-    -Find     "Helpers.IsRunning(`"$UpstreamGuid`")" `
-    -Replace  "Helpers.IsRunning(`"$NewGuid`")" `
-    -Label    "Steam launcher instance check" `
-    -Optional
+$edits += New-Edit -Group 'Identity' -Path 'ShareX.Steam\Launcher.cs' -Optional `
+    -Label 'Steam launcher instance check' `
+    -Find ('Helpers.IsRunning(' + $Q + $UpstreamGuid + $Q + ')') `
+    -Replace ('Helpers.IsRunning(' + $Q + $NewGuid + $Q + ')')
 
 # --- Update target --------------------------------------------------------
-Write-Host ""
-Write-Host "Update checks" -ForegroundColor Yellow
-
-# Without this, your build offers every user an 'update' straight to upstream
+# Without this, your build offers every user an update straight to upstream
 # 22.x, which is the whole thing you forked to avoid.
-Edit-File -Path "ShareX\ShareXUpdateManager.cs" `
-    -Find    'new GitHubUpdateChecker("ShareX", "ShareX")' `
-    -Replace "new GitHubUpdateChecker(`"$GitHubOwner`", `"$GitHubRepo`")" `
-    -Label   "release channel"
 
-Edit-File -Path "ShareX\ShareXUpdateManager.cs" `
-    -Find    'new GitHubUpdateChecker("ShareX", "DevBuilds")' `
-    -Replace "new GitHubUpdateChecker(`"$GitHubOwner`", `"$GitHubRepo`")" `
-    -Label   "dev channel"
+$newChecker = 'new GitHubUpdateChecker(' + $Q + $GitHubOwner + $Q + ', ' + $Q + $GitHubRepo + $Q + ')'
 
-Edit-File -Path "ShareX\TaskHelpers.cs" `
-    -Find    'new GitHubUpdateChecker("ShareX", "DevBuilds")' `
-    -Replace "new GitHubUpdateChecker(`"$GitHubOwner`", `"$GitHubRepo`")" `
-    -Label   "dev build download"
+$edits += New-Edit -Group 'Update checks' -Path 'ShareX\ShareXUpdateManager.cs' `
+    -Label 'release channel' -Replace $newChecker `
+    -Find ('new GitHubUpdateChecker(' + $Q + 'ShareX' + $Q + ', ' + $Q + 'ShareX' + $Q + ')')
+
+$edits += New-Edit -Group 'Update checks' -Path 'ShareX\ShareXUpdateManager.cs' `
+    -Label 'dev channel' -Replace $newChecker `
+    -Find ('new GitHubUpdateChecker(' + $Q + 'ShareX' + $Q + ', ' + $Q + 'DevBuilds' + $Q + ')')
+
+$edits += New-Edit -Group 'Update checks' -Path 'ShareX\TaskHelpers.cs' `
+    -Label 'dev build download' -Replace $newChecker `
+    -Find ('new GitHubUpdateChecker(' + $Q + 'ShareX' + $Q + ', ' + $Q + 'DevBuilds' + $Q + ')')
 
 # NOTE: ShareX.MediaLib\FFmpegGitHubDownloader.cs points at ShareX/FFmpeg.
-# That is upstream's mirror of FFmpeg *binaries*, not ShareX itself. Left
-# alone on purpose — repoint it only if you mirror FFmpeg yourself.
+# That is upstream's mirror of FFmpeg binaries, not ShareX itself. Left alone
+# on purpose: repoint it only if you mirror FFmpeg yourself.
 
 # --- Installer ------------------------------------------------------------
-Write-Host ""
-Write-Host "Installer" -ForegroundColor Yellow
-
-$iss = "ShareX.Setup\InnoSetup\ShareX-setup.iss"
-
 # MyAppReleaseDirectory and MyAppFileName are derived from MyAppName, but the
-# project FOLDER stays "ShareX". Split the two apart or the installer hunts for
-# a build output path that doesn't exist.
-Edit-File -Path $iss `
-    -Find    '#define MyAppName "ShareX"' `
-    -Replace "#define MyAppName `"$AppName`"`r`n#define MyProjectName `"ShareX`"" `
-    -Label   "display name + project name split"
+# project FOLDER stays "ShareX". Split the two apart or the installer hunts
+# for a build output path that does not exist.
 
-Edit-File -Path $iss `
-    -Find    '#define MyAppReleaseDirectory MyAppRootDirectory + "\" + MyAppName + "\bin\Release\win-x64"' `
-    -Replace '#define MyAppReleaseDirectory MyAppRootDirectory + "\" + MyProjectName + "\bin\Release\win-x64"' `
-    -Label   "build output path"
+$edits += New-Edit -Group 'Installer' -Path $iss -Label 'display name + project name split' `
+    -Find ('#define MyAppName ' + $Q + 'ShareX' + $Q) `
+    -Replace ('#define MyAppName ' + $Q + $AppName + $Q + '%NL%#define MyProjectName ' + $Q + 'ShareX' + $Q)
+
+$edits += New-Edit -Group 'Installer' -Path $iss -Label 'build output path' `
+    -Find ('#define MyAppReleaseDirectory MyAppRootDirectory + ' + $Q + '\' + $Q + ' + MyAppName + ' + $Q + '\bin\Release\win-x64' + $Q) `
+    -Replace ('#define MyAppReleaseDirectory MyAppRootDirectory + ' + $Q + '\' + $Q + ' + MyProjectName + ' + $Q + '\bin\Release\win-x64' + $Q)
 
 if (-not $RenameAssembly) {
-    Edit-File -Path $iss `
-        -Find    '#define MyAppFileName MyAppName + ".exe"' `
-        -Replace '#define MyAppFileName MyProjectName + ".exe"' `
-        -Label   "executable name (kept as ShareX.exe)"
+    $edits += New-Edit -Group 'Installer' -Path $iss -Label 'executable name (kept as ShareX.exe)' `
+        -Find ('#define MyAppFileName MyAppName + ' + $Q + '.exe' + $Q) `
+        -Replace ('#define MyAppFileName MyProjectName + ' + $Q + '.exe' + $Q)
 }
 
-Edit-File -Path $iss `
-    -Find    '#define MyAppPublisher "ShareX Team"' `
-    -Replace "#define MyAppPublisher `"$Publisher`"" `
-    -Label   "publisher"
+$edits += New-Edit -Group 'Installer' -Path $iss -Label 'publisher' `
+    -Find ('#define MyAppPublisher ' + $Q + 'ShareX Team' + $Q) `
+    -Replace ('#define MyAppPublisher ' + $Q + $Publisher + $Q)
 
-Edit-File -Path $iss `
-    -Find    '#define MyAppURL "https://getsharex.com"' `
-    -Replace "#define MyAppURL `"$Website`"" `
-    -Label   "publisher URL"
+$edits += New-Edit -Group 'Installer' -Path $iss -Label 'publisher URL' `
+    -Find ('#define MyAppURL ' + $Q + 'https://getsharex.com' + $Q) `
+    -Replace ('#define MyAppURL ' + $Q + $Website + $Q)
 
-Edit-File -Path $iss `
-    -Find    "#define MyAppId `"$UpstreamGuid`"" `
-    -Replace "#define MyAppId `"$NewGuid`"" `
-    -Label   "AppId / uninstall entry"
+$edits += New-Edit -Group 'Installer' -Path $iss -Label 'AppId / uninstall entry' `
+    -Find ('#define MyAppId ' + $Q + $UpstreamGuid + $Q) `
+    -Replace ('#define MyAppId ' + $Q + $NewGuid + $Q)
 
 # --- Assembly name --------------------------------------------------------
+
 if ($RenameAssembly) {
-    Write-Host ""
-    Write-Host "Assembly name" -ForegroundColor Yellow
+    $edits += New-Edit -Group 'Assembly name' -Path 'ShareX\ShareX.csproj' `
+        -Label ('output binary -> ' + $AppName + '.exe') `
+        -Find '<RuntimeIdentifier>win-x64</RuntimeIdentifier>' `
+        -Replace ('<RuntimeIdentifier>win-x64</RuntimeIdentifier>%NL%    <AssemblyName>' + $AppName + '</AssemblyName>')
 
-    Edit-File -Path "ShareX\ShareX.csproj" `
-        -Find    "<RuntimeIdentifier>win-x64</RuntimeIdentifier>" `
-        -Replace "<RuntimeIdentifier>win-x64</RuntimeIdentifier>`r`n    <AssemblyName>$AppName</AssemblyName>" `
-        -Label   "output binary -> $AppName.exe"
+    $edits += New-Edit -Group 'Assembly name' -Path 'ShareX.Setup\Program.cs' `
+        -Label 'setup builder exe path' `
+        -Find ('Path.Combine(BinDir, ' + $Q + 'ShareX.exe' + $Q + ')') `
+        -Replace ('Path.Combine(BinDir, ' + $Q + $AppName + '.exe' + $Q + ')')
 
-    Edit-File -Path "ShareX.Setup\Program.cs" `
-        -Find    'Path.Combine(BinDir, "ShareX.exe")' `
-        -Replace "Path.Combine(BinDir, `"$AppName.exe`")" `
-        -Label   "setup builder exe path"
+    $edits += New-Edit -Group 'Assembly name' -Path 'ShareX.Steam\Launcher.cs' -All -Optional `
+        -Label 'Steam launcher exe paths' `
+        -Find ($Q + 'ShareX.exe' + $Q) `
+        -Replace ($Q + $AppName + '.exe' + $Q)
 
-    Edit-File -Path "ShareX.Steam\Launcher.cs" `
-        -Find    '"ShareX.exe"' `
-        -Replace "`"$AppName.exe`"" `
-        -Label   "Steam launcher exe paths" `
-        -All -Optional
-
-    Edit-File -Path "ShareX.NativeMessagingHost\Program.cs" `
-        -Find    'FileHelpers.GetAbsolutePath("ShareX.exe")' `
-        -Replace "FileHelpers.GetAbsolutePath(`"$AppName.exe`")" `
-        -Label   "native messaging host exe path" `
-        -Optional
+    $edits += New-Edit -Group 'Assembly name' -Path 'ShareX.NativeMessagingHost\Program.cs' -Optional `
+        -Label 'native messaging host exe path' `
+        -Find ('FileHelpers.GetAbsolutePath(' + $Q + 'ShareX.exe' + $Q + ')') `
+        -Replace ('FileHelpers.GetAbsolutePath(' + $Q + $AppName + '.exe' + $Q + ')')
 }
 
 # --- Links ----------------------------------------------------------------
-Write-Host ""
-Write-Host "Links" -ForegroundColor Yellow
 
-# Docs stay pointed at getsharex.com. Their v19-era docs still describe this
-# build accurately, and you almost certainly don't want to rewrite them.
-Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-    -Find    'public const string Website = "https://getsharex.com";' `
-    -Replace "public const string Website = `"$Website`";`r`n        private const string UpstreamWebsite = `"https://getsharex.com`";" `
-    -Label   "homepage"
+$edits += New-Edit -Group 'Links' -Path $links -Label 'homepage' `
+    -Find ('public const string Website = ' + $Q + 'https://getsharex.com' + $Q + ';') `
+    -Replace ('public const string Website = ' + $Q + $Website + $Q + ';%NL%        private const string UpstreamWebsite = ' + $Q + 'https://getsharex.com' + $Q + ';')
 
-Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-    -Find    'public const string Callback = Website + "/callback/";' `
-    -Replace "public const string Callback = `"$CallbackUrl`";" `
-    -Label   "OAuth redirect URI"
+$edits += New-Edit -Group 'Links' -Path $links -Label 'OAuth redirect URI' `
+    -Find ('public const string Callback = Website + ' + $Q + '/callback/' + $Q + ';') `
+    -Replace ('public const string Callback = ' + $Q + $CallbackUrl + $Q + ';')
 
-# Upstream's changelog now documents 22.x. Pointing your users at it would
-# advertise features this build doesn't have.
-Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-    -Find    'public const string Changelog = Website + "/changelog";' `
-    -Replace "public const string Changelog = `"https://github.com/$GitHubOwner/$GitHubRepo/releases`";" `
-    -Label   "changelog -> your releases"
+# Upstream's changelog documents 22.x. Pointing your users at it would
+# advertise features this build does not have.
+$edits += New-Edit -Group 'Links' -Path $links -Label 'changelog -> your releases' `
+    -Find ('public const string Changelog = Website + ' + $Q + '/changelog' + $Q + ';') `
+    -Replace ('public const string Changelog = ' + $Q + $Repo + '/releases' + $Q + ';')
 
-# These stay on upstream: the reference docs still describe v19 accurately and
-# you almost certainly don't want to rewrite them.
-foreach ($c in @("Donate","PrivacyPolicy","ImageEffects","Actions")) {
-    Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-        -Find    "public const string $c = Website + " `
-        -Replace "public const string $c = UpstreamWebsite + " `
-        -Label   "$c -> upstream" `
-        -Optional
+# These stay on upstream: the reference docs still describe v19 accurately.
+foreach ($c in @('Donate', 'PrivacyPolicy', 'ImageEffects', 'Actions')) {
+    $edits += New-Edit -Group 'Links' -Path $links -Optional -Label ($c + ' -> upstream') `
+        -Find ('public const string ' + $c + ' = Website + ') `
+        -Replace ('public const string ' + $c + ' = UpstreamWebsite + ')
 }
 
-Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-    -Find    'private const string Docs = Website + "/docs";' `
-    -Replace 'private const string Docs = UpstreamWebsite + "/docs";' `
-    -Label   "docs -> upstream"
+$edits += New-Edit -Group 'Links' -Path $links -Label 'docs -> upstream' `
+    -Find ('private const string Docs = Website + ' + $Q + '/docs' + $Q + ';') `
+    -Replace ('private const string Docs = UpstreamWebsite + ' + $Q + '/docs' + $Q + ';')
 
-Edit-File -Path "ShareX.HelpersLib\Links.cs" `
-    -Find    'public const string GitHub = "https://github.com/ShareX/ShareX";' `
-    -Replace "public const string GitHub = `"https://github.com/$GitHubOwner/$GitHubRepo`";" `
-    -Label   "repo link"
+$edits += New-Edit -Group 'Links' -Path $links -Label 'repo link' `
+    -Find ('public const string GitHub = ' + $Q + 'https://github.com/ShareX/ShareX' + $Q + ';') `
+    -Replace ('public const string GitHub = ' + $Q + $Repo + $Q + ';')
 
-# --- Done -----------------------------------------------------------------
-Write-Host ""
-Write-Host "$($script:Changes) replacements across $($script:Files.Count) files." -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Record this GUID — you need the same one for every future release," -ForegroundColor Yellow
-Write-Host "or your installer stops recognizing its own previous installs:" -ForegroundColor Yellow
-Write-Host "  $NewGuid" -ForegroundColor White
-Write-Host ""
-Write-Host "Still to do by hand:" -ForegroundColor Yellow
-Write-Host "  - Links.cs still lists upstream's Discord, X, Reddit, Steam and MS Store."
-Write-Host "    Blank them or point them at your own; they currently send your users"
-Write-Host "    to a community that doesn't support this build."
-Write-Host "  - IntegrationHelpers.cs keeps the native messaging host ID"
-Write-Host "    'com.getsharex.sharex'. Renaming it breaks the official browser"
-Write-Host "    extension with nothing to replace it, so it is left alone."
-Write-Host "  - Add your own copyright line. Do not remove the existing ones."
-Write-Host ""
+# --- Apply ----------------------------------------------------------------
+
+$applied = 0
+$skipped = 0
+$group = ''
+
+foreach ($e in $edits) {
+    if ($e.Group -ne $group) {
+        $group = $e.Group
+        Write-Host $group -ForegroundColor Yellow
+    }
+
+    $full = Join-Path $RepoRoot $e.Path
+
+    if (-not (Test-Path $full)) {
+        if ($e.Optional) {
+            Write-Host ('  skip     ' + $e.Path + ' (not present)') -ForegroundColor DarkGray
+            $skipped++
+            continue
+        }
+        throw ('Missing file: ' + $e.Path + '. Run this from the root of your checkout.')
+    }
+
+    $text = [System.IO.File]::ReadAllText($full)
+
+    # Match the file's own line endings for any inserted line.
+    if ($text.Contains("`r`n")) { $nl = "`r`n" } else { $nl = "`n" }
+    $replace = $e.Replace.Replace('%NL%', $nl)
+
+    $count = ([regex]::Matches($text, [regex]::Escape($e.Find))).Count
+
+    # Check Find FIRST. Two edits can share a replacement string (both update
+    # checkers become the same call), so testing "is the replacement present"
+    # up front would let one edit mask the other and silently leave an
+    # upstream reference behind.
+    if ($count -eq 0) {
+        if ($text.Contains($replace)) {
+            Write-Host ('  already  ' + $e.Label) -ForegroundColor DarkGray
+            $skipped++
+            continue
+        }
+        if ($e.Optional) {
+            Write-Host ('  skip     ' + $e.Label + ' (not found)') -ForegroundColor DarkGray
+            $skipped++
+            continue
+        }
+        throw ('Not found in ' + $e.Path + ': ' + $e.Find)
+    }
+
+    if (-not $e.All -and $count -gt 1) {
+        throw ('Found ' + $count + ' matches for a single-match edit in ' + $e.Path + '. Refusing to guess.')
+    }
+
+    if ($e.All) {
+        $text = $text.Replace($e.Find, $replace)
+    }
+    else {
+        $i = $text.IndexOf($e.Find)
+        $text = $text.Substring(0, $i) + $replace + $text.Substring($i + $e.Find.Length)
+    }
+
+    if ($PSCmdlet.ShouldProcess($e.Path, $e.Label)) {
+        [System.IO.File]::WriteAllText($full, $text, (New-Object System.Text.UTF8Encoding($false)))
+    }
+
+    $applied++
+    Write-Host ('  ok       ' + $e.Label + '  (' + $e.Path + ')') -ForegroundColor Green
+}
+
+Write-Host ''
+Write-Host ($applied.ToString() + ' applied, ' + $skipped.ToString() + ' skipped or already in place.') -ForegroundColor Cyan
+Write-Host ''
+
+if ($GuidSource -eq 'generated') {
+    Write-Host 'Install GUID for this fork:' -ForegroundColor Yellow
+    Write-Host ('  ' + $NewGuid)
+    Write-Host 'Committing the rebrand preserves it. To re-run this script later,'
+    Write-Host 'pass it back in or you get a different identity:'
+    Write-Host ('  .\Rebrand-RavenX.ps1 -Guid ' + $NewGuid)
+    Write-Host ''
+}
+
+Write-Host 'Still to do by hand:' -ForegroundColor Yellow
+Write-Host '  - Links.cs still lists upstream Discord, X, Reddit, Steam and MS Store.'
+Write-Host '    Blank them or point them at your own.'
+Write-Host '  - IntegrationHelpers.cs keeps the native messaging host ID'
+Write-Host '    com.getsharex.sharex. Renaming it breaks the official browser'
+Write-Host '    extension with nothing to replace it, so it is left alone.'
+Write-Host '  - Add your own copyright line. Do not remove the existing ones.'
+Write-Host ''

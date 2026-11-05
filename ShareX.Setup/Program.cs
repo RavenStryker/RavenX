@@ -294,6 +294,11 @@ namespace ShareX.Setup
                     process.StartInfo = psi;
                     process.Start();
                     process.WaitForExit();
+
+                    if (process.ExitCode != 0)
+                    {
+                        throw new Exception($"Inno Setup failed with exit code {process.ExitCode}: {fileName}");
+                    }
                 }
 
                 Console.WriteLine("Setup file compiled: " + fileName);
